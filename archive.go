@@ -3,7 +3,7 @@ package rardecode
 import (
 	"bufio"
 	"bytes"
-	"errors"
+	goerrors "errors"
 	"fmt"
 	"io"
 	"os"
@@ -11,6 +11,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/pkg/errors"
 )
 
 const (
@@ -22,17 +24,17 @@ const (
 )
 
 var (
-	errNoSig              = errors.New("rardecode: RAR signature not found")
-	errVerMismatch        = errors.New("rardecode: volume version mistmatch")
-	errCorruptHeader      = errors.New("rardecode: corrupt block header")
-	errCorruptFileHeader  = errors.New("rardecode: corrupt file header")
-	errBadHeaderCrc       = errors.New("rardecode: bad header crc")
-	errUnknownArc         = errors.New("rardecode: unknown archive version")
-	errUnknownDecoder     = errors.New("rardecode: unknown decoder version")
-	errUnsupportedDecoder = errors.New("rardecode: unsupported decoder version")
-	errArchiveContinues   = errors.New("rardecode: archive continues in next volume")
-	errArchiveEnd         = errors.New("rardecode: archive end reached")
-	errDecoderOutOfData   = errors.New("rardecode: decoder expected more data than is in packed file")
+	errNoSig              = goerrors.New("rardecode: RAR signature not found")
+	errVerMismatch        = goerrors.New("rardecode: volume version mistmatch")
+	errCorruptHeader      = goerrors.New("rardecode: corrupt block header")
+	errCorruptFileHeader  = goerrors.New("rardecode: corrupt file header")
+	errBadHeaderCrc       = goerrors.New("rardecode: bad header crc")
+	errUnknownArc         = goerrors.New("rardecode: unknown archive version")
+	errUnknownDecoder     = goerrors.New("rardecode: unknown decoder version")
+	errUnsupportedDecoder = goerrors.New("rardecode: unsupported decoder version")
+	errArchiveContinues   = goerrors.New("rardecode: archive continues in next volume")
+	errArchiveEnd         = goerrors.New("rardecode: archive end reached")
+	errDecoderOutOfData   = goerrors.New("rardecode: decoder expected more data than is in packed file")
 
 	reDigits = regexp.MustCompile(`\d+`)
 )
@@ -100,7 +102,7 @@ func findSig(br *bufio.Reader) (int, error) {
 			continue
 		} else if err != nil {
 			if err == io.EOF {
-				err = errNoSig
+				err = errors.WithStack(errNoSig)
 			}
 			return 0, err
 		}
@@ -108,7 +110,7 @@ func findSig(br *bufio.Reader) (int, error) {
 		b, err = br.Peek(len(sigPrefix[1:]) + 2)
 		if err != nil {
 			if err == io.EOF {
-				err = errNoSig
+				err = errors.WithStack(errNoSig)
 			}
 			return 0, err
 		}
@@ -130,7 +132,7 @@ func findSig(br *bufio.Reader) (int, error) {
 
 		return ver, nil
 	}
-	return 0, errNoSig
+	return 0, errors.WithStack(errNoSig)
 }
 
 // volume extends a fileBlockReader to be used across multiple
@@ -230,7 +232,7 @@ func (v *volume) next() (*fileBlockHeader, error) {
 		var atEOF bool
 
 		h, err := v.fileBlockReader.next()
-		switch err {
+		switch errors.Cause(err) {
 		case errArchiveContinues:
 		case io.EOF:
 			// Read all of volume without finding an end block. The only way
@@ -257,7 +259,7 @@ func (v *volume) next() (*fileBlockHeader, error) {
 			return nil, err
 		}
 		if v.version() != ver {
-			return nil, errVerMismatch
+			return nil, errors.WithStack(errVerMismatch)
 		}
 		v.files = append(v.files, v.dir+v.file)
 		v.reset() // reset encryption
@@ -305,5 +307,5 @@ func newFileBlockReader(br *bufio.Reader, pass string) (fileBlockReader, error) 
 	case fileFmt50:
 		return newArchive50(br, pass), nil
 	}
-	return nil, errUnknownArc
+	return nil, errors.WithStack(errUnknownArc)
 }

@@ -1,8 +1,10 @@
 package rardecode
 
 import (
-	"errors"
+	goerrors "errors"
 	"io"
+
+	"github.com/pkg/errors"
 )
 
 const (
@@ -12,8 +14,8 @@ const (
 )
 
 var (
-	errHuffDecodeFailed   = errors.New("rardecode: huffman decode failed")
-	errInvalidLengthTable = errors.New("rardecode: invalid huffman code length table")
+	errHuffDecodeFailed   = goerrors.New("rardecode: huffman decode failed")
+	errInvalidLengthTable = goerrors.New("rardecode: invalid huffman code length table")
 )
 
 type huffmanDecoder struct {
@@ -131,7 +133,7 @@ func (h *huffmanDecoder) readSym(r bitReader) (int, error) {
 
 	pos := h.pos[bits] + dist
 	if pos > len(h.symbol) {
-		return 0, errHuffDecodeFailed
+		return 0, errors.WithStack(errHuffDecodeFailed)
 	}
 
 	return h.symbol[pos], nil
@@ -194,7 +196,7 @@ func readCodeLengthTable(br bitReader, codeLength []byte, addOld bool) error {
 		}
 		if l < 18 {
 			if i == 0 {
-				return errInvalidLengthTable
+				return errors.WithStack(errInvalidLengthTable)
 			}
 			value = codeLength[i-1]
 		}

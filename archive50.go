@@ -5,12 +5,14 @@ import (
 	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
-	"errors"
+	goerrors "errors"
 	"hash"
 	"hash/crc32"
 	"io"
 	"io/ioutil"
 	"time"
+
+	"github.com/pkg/errors"
 )
 
 const (
@@ -56,9 +58,9 @@ const (
 )
 
 var (
-	errBadPassword      = errors.New("rardecode: incorrect password")
-	errCorruptEncrypt   = errors.New("rardecode: corrupt encryption data")
-	errUnknownEncMethod = errors.New("rardecode: unknown encryption method")
+	errBadPassword      = goerrors.New("rardecode: incorrect password")
+	errCorruptEncrypt   = goerrors.New("rardecode: corrupt encryption data")
+	errUnknownEncMethod = goerrors.New("rardecode: unknown encryption method")
 )
 
 type extra struct {
@@ -179,12 +181,12 @@ func calcKeys50(pass, salt []byte, kdfCount int) [][]byte {
 // getKeys reads kdfcount and salt from b and returns the corresponding encryption keys.
 func (a *archive50) getKeys(b *readBuf) (keys [][]byte, err error) {
 	if len(*b) < 17 {
-		return nil, errCorruptEncrypt
+		return nil, errors.WithStack(errCorruptEncrypt)
 	}
 	// read kdf count and salt
 	kdfCount := int(b.byte())
 	if kdfCount > maxKdfCount {
-		return nil, errCorruptEncrypt
+		return nil, errors.WithStack(errCorruptEncrypt)
 	}
 	kdfCount = 1 << uint(kdfCount)
 	salt := b.bytes(16)
@@ -216,7 +218,7 @@ func checkPassword(b *readBuf, keys [][]byte) error {
 	sum := b.bytes(4)
 	csum := sha256.Sum256(pwcheck)
 	if bytes.Equal(sum, csum[:len(sum)]) && !bytes.Equal(pwcheck, keys[2]) {
-		return errBadPassword
+		return errors.WithStack(errBadPassword)
 	}
 	return nil
 }
@@ -224,7 +226,7 @@ func checkPassword(b *readBuf, keys [][]byte) error {
 // parseFileEncryptionRecord processes the optional file encryption record from a file header.
 func (a *archive50) parseFileEncryptionRecord(b readBuf, f *fileBlockHeader) error {
 	if ver := b.uvarint(); ver != 0 {
-		return errUnknownEncMethod
+		return errors.WithStack(errUnknownEncMethod)
 	}
 	flags := b.uvarint()
 
@@ -235,7 +237,7 @@ func (a *archive50) parseFileEncryptionRecord(b readBuf, f *fileBlockHeader) err
 
 	f.key = keys[0]
 	if len(b) < 16 {
-		return errCorruptEncrypt
+		return errors.WithStack(errCorruptEncrypt)
 	}
 	f.iv = b.bytes(16)
 
@@ -267,13 +269,13 @@ func (a *archive50) parseFileHeader(h *blockHeader50) (*fileBlockHeader, error) 
 	f.Attributes = int64(h.data.uvarint())
 	if flags&file5HasUnixMtime > 0 {
 		if len(h.data) < 4 {
-			return nil, errCorruptFileHeader
+			return nil, errors.WithStack(errCorruptFileHeader)
 		}
 		f.ModificationTime = time.Unix(int64(h.data.uint32()), 0)
 	}
 	if flags&file5HasCRC32 > 0 {
 		if len(h.data) < 4 {
-			return nil, errCorruptFileHeader
+			return nil, errors.WithStack(errCorruptFileHeader)
 		}
 		a.checksum.sum = append([]byte(nil), h.data.bytes(4)...)
 		if f.first {
@@ -289,7 +291,7 @@ func (a *archive50) parseFileHeader(h *blockHeader50) (*fileBlockHeader, error) 
 	if f.first && method != 0 {
 		unpackver := flags & 0x003f
 		if unpackver != 0 {
-			return nil, errUnknownDecoder
+			return nil, errors.WithStack(errUnknownDecoder)
 		}
 		if a.dec == nil {
 			a.dec = new(decoder50)
@@ -306,7 +308,7 @@ func (a *archive50) parseFileHeader(h *blockHeader50) (*fileBlockHeader, error) 
 	}
 	nlen := int(h.data.uvarint())
 	if len(h.data) < nlen {
-		return nil, errCorruptFileHeader
+		return nil, errors.WithStack(errCorruptFileHeader)
 	}
 	f.Name = string(h.data.bytes(nlen))
 
@@ -338,7 +340,7 @@ func (a *archive50) parseFileHeader(h *blockHeader50) (*fileBlockHeader, error) 
 // parseEncryptionBlock calculates the key for block encryption.
 func (a *archive50) parseEncryptionBlock(b readBuf) error {
 	if ver := b.uvarint(); ver != 0 {
-		return errUnknownEncMethod
+		return errors.WithStack(errUnknownEncMethod)
 	}
 	flags := b.uvarint()
 	keys, err := a.getKeys(&b)
@@ -388,7 +390,7 @@ func (a *archive50) readBlockHeader() (*blockHeader50, error) {
 	// check header crc
 	hash.Write(a.buf[n:])
 	if crc != hash.Sum32() {
-		return nil, errBadHeaderCrc
+		return nil, errors.WithStack(errBadHeaderCrc)
 	}
 
 	b = a.buf
@@ -404,7 +406,7 @@ func (a *archive50) readBlockHeader() (*blockHeader50, error) {
 		h.dataSize = int64(b.uvarint())
 	}
 	if len(b) < extraSize {
-		return nil, errCorruptHeader
+		return nil, errors.WithStack(errCorruptHeader)
 	}
 	h.data = b.bytes(len(b) - extraSize)
 
@@ -412,7 +414,7 @@ func (a *archive50) readBlockHeader() (*blockHeader50, error) {
 	for len(b) > 0 {
 		size = int(b.uvarint())
 		if len(b) < size {
-			return nil, errCorruptHeader
+			return nil, errors.WithStack(errCorruptHeader)
 		}
 		data := readBuf(b.bytes(size))
 		ftype := data.uvarint()
@@ -442,9 +444,9 @@ func (a *archive50) next() (*fileBlockHeader, error) {
 		case block5End:
 			flags := h.data.uvarint()
 			if flags&endArc5NotLast == 0 || !a.multi {
-				return nil, errArchiveEnd
+				return nil, errors.WithStack(errArchiveEnd)
 			}
-			return nil, errArchiveContinues
+			return nil, errors.WithStack(errArchiveContinues)
 		default:
 			// discard block data
 			_, err = io.Copy(ioutil.Discard, a.byteReader)

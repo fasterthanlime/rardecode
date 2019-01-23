@@ -1,8 +1,10 @@
 package rardecode
 
 import (
-	"errors"
+	goerrors "errors"
 	"io"
+
+	"github.com/pkg/errors"
 )
 
 const (
@@ -14,8 +16,8 @@ const (
 )
 
 var (
-	errUnknownFilter       = errors.New("rardecode: unknown V5 filter")
-	errCorruptDecodeHeader = errors.New("rardecode: corrupt decode header")
+	errUnknownFilter       = goerrors.New("rardecode: unknown V5 filter")
+	errCorruptDecodeHeader = goerrors.New("rardecode: corrupt decode header")
 )
 
 // decoder50 implements the decoder interface for RAR 5 compression.
@@ -53,7 +55,7 @@ func (d *decoder50) init(r io.ByteReader, reset bool) error {
 	}
 	err := d.readBlockHeader()
 	if err == io.EOF {
-		return errDecoderOutOfData
+		return errors.WithStack(errDecoderOutOfData)
 	}
 	return err
 }
@@ -66,7 +68,7 @@ func (d *decoder50) readBlockHeader() error {
 
 	bytecount := (flags>>3)&3 + 1
 	if bytecount == 4 {
-		return errCorruptDecodeHeader
+		return errors.WithStack(errCorruptDecodeHeader)
 	}
 
 	hsum, err := d.r.ReadByte()
@@ -86,7 +88,7 @@ func (d *decoder50) readBlockHeader() error {
 		blockBytes |= int(n) << (i * 8)
 	}
 	if sum != hsum { // bad header checksum
-		return errCorruptDecodeHeader
+		return errors.WithStack(errCorruptDecodeHeader)
 	}
 	blockBits += (blockBytes - 1) * 8
 
@@ -179,7 +181,7 @@ func readFilter(br bitReader) (*filterBlock, error) {
 	case 3:
 		fb.filter = filterArm
 	default:
-		return nil, errUnknownFilter
+		return nil, errors.WithStack(errUnknownFilter)
 	}
 	return fb, nil
 }
@@ -285,7 +287,7 @@ func (d *decoder50) fill(w *window) ([]*filterBlock, error) {
 		}
 		if err != nil {
 			if err == io.EOF {
-				return fl, errDecoderOutOfData
+				return fl, errors.WithStack(errDecoderOutOfData)
 			}
 			return fl, err
 		}

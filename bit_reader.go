@@ -1,6 +1,10 @@
 package rardecode
 
-import "io"
+import (
+	"io"
+
+	"github.com/pkg/errors"
+)
 
 type bitReader interface {
 	readBits(n uint) (int, error) // read n bits of data
@@ -27,7 +31,7 @@ func (l *limitedBitReader) readBits(n uint) (int, error) {
 	if err == nil {
 		l.n -= int(n)
 	} else if err == io.EOF {
-		err = l.err
+		err = errors.WithStack(l.err)
 	}
 	return v, err
 }

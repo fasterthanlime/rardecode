@@ -5,6 +5,8 @@ import (
 	"encoding/binary"
 	"hash/crc32"
 	"io"
+
+	"github.com/pkg/errors"
 )
 
 const (
@@ -297,7 +299,7 @@ type vmFilter struct {
 // execute implements v3filter type for VM based RAR 3 filters.
 func (f *vmFilter) execute(r map[int]uint32, global, buf []byte, offset int64) ([]byte, error) {
 	if len(buf) > vmGlobalAddr {
-		return buf, errInvalidFilter
+		return buf, errors.WithStack(errInvalidFilter)
 	}
 	v := newVM(buf)
 

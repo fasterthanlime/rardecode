@@ -2,8 +2,9 @@ package rardecode
 
 import (
 	"bytes"
-	"errors"
 	"io"
+
+	"github.com/pkg/errors"
 )
 
 const (
@@ -72,7 +73,7 @@ func readVMCode(br *rarBitReader) ([]byte, error) {
 		return nil, err
 	}
 	if n > maxCodeSize || n == 0 {
-		return nil, errInvalidFilter
+		return nil, errors.WithStack(errInvalidFilter)
 	}
 	buf := make([]byte, n)
 	err = br.readFull(buf)
@@ -85,7 +86,7 @@ func readVMCode(br *rarBitReader) ([]byte, error) {
 	}
 	// simple xor checksum on data
 	if x != buf[0] {
-		return nil, errInvalidFilter
+		return nil, errors.WithStack(errInvalidFilter)
 	}
 	return buf, nil
 }
@@ -108,10 +109,10 @@ func (d *decoder29) parseVMFilter(buf []byte) (*filterBlock, error) {
 		} else {
 			n--
 			if n > maxUniqueFilters {
-				return nil, errInvalidFilter
+				return nil, errors.WithStack(errInvalidFilter)
 			}
 			if int(n) > len(d.filters) {
-				return nil, errInvalidFilter
+				return nil, errors.WithStack(errInvalidFilter)
 			}
 		}
 		d.fnum = int(n)
@@ -181,7 +182,7 @@ func (d *decoder29) parseVMFilter(buf []byte) (*filterBlock, error) {
 			return nil, err
 		}
 		if n > vmGlobalSize-vmFixedGlobalSize {
-			return nil, errInvalidFilter
+			return nil, errors.WithStack(errInvalidFilter)
 		}
 		g = make([]byte, n)
 		err = br.readFull(g)
@@ -213,7 +214,7 @@ func (d *decoder29) readBlockHeader() error {
 		}
 	}
 	if err == io.EOF {
-		err = errDecoderOutOfData
+		err = errors.WithStack(errDecoderOutOfData)
 	}
 	return err
 
@@ -255,7 +256,7 @@ func (d *decoder29) fill(w *window) ([]*filterBlock, error) {
 			d.decode = nil // clear decoder, it will be setup by next init()
 			err = io.EOF
 		case io.EOF:
-			err = errDecoderOutOfData
+			err = errors.WithStack(errDecoderOutOfData)
 		}
 		return fl, err
 	}

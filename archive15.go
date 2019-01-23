@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/sha1"
-	"errors"
+	goerrors "errors"
 	"hash"
 	"hash/crc32"
 	"io"
@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf16"
+
+	"github.com/pkg/errors"
 )
 
 const (
@@ -52,7 +54,7 @@ const (
 )
 
 var (
-	errMultipleDecoders = errors.New("rardecode: multiple decoders in a single archive not supported")
+	errMultipleDecoders = goerrors.New("rardecode: multiple decoders in a single archive not supported")
 )
 
 type blockHeader15 struct {
@@ -264,7 +266,7 @@ func (a *archive15) parseFileHeader(h *blockHeader15) (*fileBlockHeader, error) 
 
 	b := h.data
 	if len(b) < 21 {
-		return nil, errCorruptFileHeader
+		return nil, errors.WithStack(errCorruptFileHeader)
 	}
 
 	f.PackedSize = h.dataSize
@@ -282,7 +284,7 @@ func (a *archive15) parseFileHeader(h *blockHeader15) (*fileBlockHeader, error) 
 	f.Attributes = int64(b.uint32())
 	if h.flags&fileLargeData > 0 {
 		if len(b) < 8 {
-			return nil, errCorruptFileHeader
+			return nil, errors.WithStack(errCorruptFileHeader)
 		}
 		_ = b.uint32() // already read large PackedSize in readBlockHeader
 		f.UnPackedSize |= int64(b.uint32()) << 32
@@ -292,7 +294,7 @@ func (a *archive15) parseFileHeader(h *blockHeader15) (*fileBlockHeader, error) 
 		f.UnPackedSize = -1
 	}
 	if len(b) < namesize {
-		return nil, errCorruptFileHeader
+		return nil, errors.WithStack(errCorruptFileHeader)
 	}
 	name := b.bytes(namesize)
 	if h.flags&fileUnicode == 0 {
@@ -318,7 +320,7 @@ func (a *archive15) parseFileHeader(h *blockHeader15) (*fileBlockHeader, error) 
 	var salt []byte
 	if h.flags&fileSalt > 0 {
 		if len(b) < saltSize {
-			return nil, errCorruptFileHeader
+			return nil, errors.WithStack(errCorruptFileHeader)
 		}
 		salt = b.bytes(saltSize)
 	}
@@ -341,15 +343,15 @@ func (a *archive15) parseFileHeader(h *blockHeader15) (*fileBlockHeader, error) 
 	if a.dec == nil {
 		switch unpackver {
 		case 15, 20, 26:
-			return nil, errUnsupportedDecoder
+			return nil, errors.WithStack(errUnsupportedDecoder)
 		case 29:
 			a.dec = new(decoder29)
 		default:
-			return nil, errUnknownDecoder
+			return nil, errors.WithStack(errUnknownDecoder)
 		}
 		a.decVer = unpackver
 	} else if a.decVer != unpackver {
-		return nil, errMultipleDecoders
+		return nil, errors.WithStack(errMultipleDecoders)
 	}
 	f.decoder = a.dec
 	return f, nil
@@ -385,7 +387,7 @@ func (a *archive15) readBlockHeader() (*blockHeader15, error) {
 	h.flags = b.uint16()
 	size := b.uint16()
 	if size < 7 {
-		return nil, errCorruptHeader
+		return nil, errors.WithStack(errCorruptHeader)
 	}
 	size -= 7
 	if int(size) > cap(a.buf) {
@@ -397,17 +399,17 @@ func (a *archive15) readBlockHeader() (*blockHeader15, error) {
 	}
 	hash.Write(h.data)
 	if crc != uint16(hash.Sum32()) {
-		return nil, errBadHeaderCrc
+		return nil, errors.WithStack(errBadHeaderCrc)
 	}
 	if h.flags&blockHasData > 0 {
 		if len(h.data) < 4 {
-			return nil, errCorruptHeader
+			return nil, errors.WithStack(errCorruptHeader)
 		}
 		h.dataSize = int64(h.data.uint32())
 	}
 	if (h.htype == blockService || h.htype == blockFile) && h.flags&fileLargeData > 0 {
 		if len(h.data) < 25 {
-			return nil, errCorruptHeader
+			return nil, errors.WithStack(errCorruptHeader)
 		}
 		b := h.data[21:25]
 		h.dataSize |= int64(b.uint32()) << 32
@@ -435,9 +437,9 @@ func (a *archive15) next() (*fileBlockHeader, error) {
 			a.solid = h.flags&arcSolid > 0
 		case blockEnd:
 			if h.flags&endArcNotLast == 0 || !a.multi {
-				return nil, errArchiveEnd
+				return nil, errors.WithStack(errArchiveEnd)
 			}
-			return nil, errArchiveContinues
+			return nil, errors.WithStack(errArchiveContinues)
 		default:
 			_, err = io.Copy(ioutil.Discard, a.byteReader)
 		}

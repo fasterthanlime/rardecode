@@ -1,8 +1,10 @@
 package rardecode
 
 import (
-	"errors"
+	goerrors "errors"
 	"io"
+
+	"github.com/pkg/errors"
 )
 
 const (
@@ -11,8 +13,8 @@ const (
 )
 
 var (
-	errTooManyFilters = errors.New("rardecode: too many filters")
-	errInvalidFilter  = errors.New("rardecode: invalid filter")
+	errTooManyFilters = goerrors.New("rardecode: too many filters")
+	errInvalidFilter  = goerrors.New("rardecode: invalid filter")
 )
 
 // filter functions take a byte slice, the current output offset and
@@ -160,7 +162,7 @@ func (d *decodeReader) queueFilter(f *filterBlock) error {
 		d.filters = nil
 	}
 	if len(d.filters) >= maxQueuedFilters {
-		return errTooManyFilters
+		return errors.WithStack(errTooManyFilters)
 	}
 	// offset & length must be < window size
 	f.offset &= d.win.mask
@@ -169,7 +171,7 @@ func (d *decodeReader) queueFilter(f *filterBlock) error {
 	for _, fb := range d.filters {
 		if f.offset < fb.offset {
 			// filter block must not start before previous filter
-			return errInvalidFilter
+			return errors.WithStack(errInvalidFilter)
 		}
 		f.offset -= fb.offset
 	}
@@ -189,7 +191,7 @@ func (d *decodeReader) processFilters() (err error) {
 		// fill() didn't return enough bytes
 		err = d.readErr()
 		if err == nil || err == io.EOF {
-			return errInvalidFilter
+			return errors.WithStack(errInvalidFilter)
 		}
 		return err
 	}
@@ -220,7 +222,7 @@ func (d *decodeReader) processFilters() (err error) {
 			return nil
 		}
 		if f.length != len(d.outbuf) {
-			return errInvalidFilter
+			return errors.WithStack(errInvalidFilter)
 		}
 		d.filters = d.filters[1:]
 
